@@ -12,13 +12,16 @@ built `.pck`, Linux/Proton build and test scripts, and install instructions.
 Mod authors: if you'd rather this build not be shared here, open an issue and I'll take it down.
 
 Built from `trism-prism/lucid-blocks-coop-updated` commit
-[`96e7fc1`](https://github.com/trism-prism/lucid-blocks-coop-updated/commit/96e7fc146c590e2fbc904a9e574a10e88f085ab4).
+[`96e7fc1`](https://github.com/trism-prism/lucid-blocks-coop-updated/commit/96e7fc146c590e2fbc904a9e574a10e88f085ab4)
+plus one small fix in [`patches/`](patches/): **Host Steam no longer opens the Steam overlay
+automatically.** Under Proton the invite overlay could open invisibly, and Proton blocks all game
+input while the overlay is open, so the game looked frozen.
 
 ## Download
 
 Grab `lucid-blocks-coop.pck` from [Releases](../../releases/latest).
 
-SHA-256: `ecea222ccfa9efef1cab3acc68de968ce05b715066674be75156936c4106501a`
+SHA-256: `96f7878696464147ab5fc3e0335f15478a1eac83418542765b5de0bb7c748c60`
 
 ## Install (Windows, Linux, Steam Deck)
 
@@ -36,10 +39,16 @@ Uninstall: delete the `.pck`.
 
 **Host:**
 1. Load a world.
-2. Press `/` to open the command chat, type `/steam_host` and press Enter.
-3. Steam's invite window opens, so invite your friend from there. If you closed it, `/invite` opens it again.
+2. Click **Host Steam** in the co-op menu, or press `/`, type `/steam_host` and press Enter.
+   The status should say *Hosting Steam lobby*.
+3. In the **Steam friends list** (the normal Steam window, outside the game), right-click your
+   friend → **Invite to Game**.
 
-**Friend:** accept the Steam invite, or right-click the host in your friends list → **Join Game**.
+**Friend:** accept the invite in Steam chat, or right-click the host in the friends list → **Join Game**.
+The friend needs to own Lucid Blocks and have the same `.pck` installed.
+
+`/invite` still opens Steam's in-game invite overlay if you want it. If the game "freezes" after
+that, press **Shift+Tab** to close the overlay and get your input back.
 
 ## Direct IP (fallback)
 
@@ -64,14 +73,15 @@ Uninstall: delete the `.pck`.
 ## What's tested
 
 All tests ran with the real 5.2.0 game exe (SHA-256 `cb6ea427…c4a558`) on Linux under Proton
-Experimental (11.0-100), on 2026-11-21:
+Experimental (11.0-100), on 2026-11-21 (build 2):
 
 - **Two-client LAN test** (the mod author's `tests/lan/local_coop.gd`): host 8 checks and guest 11
   checks, **0 failures**. It covers joining, guest block edits saved on the host, independent loading
   and dimension travel, reconnecting, cross-dimension teleport, and a clean host shutdown.
-- **Steam host test** (`scripts/steam_host_probe.gd`): with a real logged-in Steam account,
-  `/steam_host` creates a friends-only lobby owned by the host, and the Steam host connection comes
-  up. 5 checks, 0 failures.
+- **Steam host test** (`scripts/run_steam_probe.sh` + `steam_host_probe.gd`, windowed, with the
+  Steam overlay loaded): with a real logged-in Steam account, Host Steam creates a friends-only
+  lobby owned by the host, the Steam host connection comes up, and the overlay stays closed.
+  6 checks, 0 failures.
 
 **Not tested yet:** a second Steam account actually joining through an invite, play across two
 real PCs, and how it feels in a long session.
@@ -92,6 +102,7 @@ editor (`Godot_v4.6-stable_linux.x86_64.zip`, SHA-256 `6bcc59df…6dc06`) and
 ```bash
 git clone https://github.com/trism-prism/lucid-blocks-coop-updated mod-src
 git -C mod-src checkout 96e7fc146c590e2fbc904a9e574a10e88f085ab4
+git -C mod-src apply ../patches/0001-no-auto-steam-overlay.patch
 # Generate the imported assets (the source repo doesn't track .godot/)
 ./Godot_v4.6-stable_linux.x86_64 --headless --path mod-src/mod/overrides --import
 ./scripts/build_mod_linux.sh mod-src ./gdre_tools.x86_64 build
@@ -110,4 +121,4 @@ The build contains no game files, only the mod's own scripts and assets.
 - [parkers0405](https://github.com/parkers0405): original Lucid Blocks co-op mod
 - [trism-prism](https://github.com/trism-prism): 5.2.0 update, identity and dimension rework, test suite
 - Lucid Blocks by its developers. Buy it on [Steam](https://store.steampowered.com/app/3495730/Lucid_Blocks/).
-- This repo: packaging, Linux/Proton build and test scripts, and these instructions.
+- This repo: packaging, the Proton overlay-freeze fix, Linux/Proton build and test scripts, and these instructions.

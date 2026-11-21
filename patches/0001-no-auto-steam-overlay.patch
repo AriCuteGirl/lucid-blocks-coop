@@ -1,0 +1,25 @@
+diff --git a/mod/overrides/coop_mod/coop_manager.gd b/mod/overrides/coop_mod/coop_manager.gd
+index ee7cde0..a64a977 100644
+--- a/mod/overrides/coop_mod/coop_manager.gd
++++ b/mod/overrides/coop_mod/coop_manager.gd
+@@ -2791,7 +2791,7 @@ func _start_steam_host_peer(lobby_id: int) -> void:
+     reconnect_steam_lobby_id = active_steam_lobby_id
+     reconnect_steam_host_id = active_steam_host_id
+     _install_player_death_hook()
+-    status_message = "Hosting Steam lobby"
++    status_message = "Hosting Steam lobby - invite friends from your Steam friends list"
+     _update_status_text()
+     if pending_steam_open_invite_dialog:
+         pending_steam_open_invite_dialog = false
+@@ -2830,7 +2830,10 @@ func _start_steam_client_peer(lobby_id: int) -> void:
+     _update_status_text()
+ 
+ 
+-func host_steam_session(auto_open_invite_dialog: bool = true) -> void:
++# Proton disables all game input while the Steam overlay is active; if the invite
++# overlay opens invisibly the game looks frozen. Don't open it automatically: invite
++# from the Steam friends list instead (/invite still opens it on request).
++func host_steam_session(auto_open_invite_dialog: bool = false) -> void:
+     if not _can_share_loaded_world():
+         status_message = "Open Steam co-op from inside a loaded world"
+         _update_status_text()
