@@ -1,0 +1,4 @@
+build/
+work/
+mod-src/
+*.pck
