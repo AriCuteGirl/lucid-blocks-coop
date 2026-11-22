@@ -20,6 +20,9 @@ plus the fixes in [`patches/coop-fixes.patch`](patches/coop-fixes.patch):
   release builds of Godot crash on the freed key.
 - **Guest dropped with "Chest transaction acknowledgement timed out".** One 5-second timer covered
   steps that may each take 30 seconds. On a host the same timer could disable the player for good.
+- **Host slowing to a crawl.** The mod's older copies of two game scripts had lost 5.2.0 safeguards:
+  mobs were simulated past 96 blocks, and chunk streaming ran every physics tick instead of once per
+  drawn frame, so slow frames queued even more work. Both are back, plus the per-frame chunk time limit.
 - **Login timeout** raised from 5 to 20 seconds for slow connections.
 - **Host Steam no longer opens the Steam overlay automatically.** Under Proton it could open
   invisibly and block all game input, so the game looked frozen.
@@ -28,7 +31,7 @@ plus the fixes in [`patches/coop-fixes.patch`](patches/coop-fixes.patch):
 
 Grab `lucid-blocks-coop.pck` from [Releases](../../releases/latest).
 
-SHA-256: `fc1a5749c8a6f9331a09a66a5a6ae2292b48800afa942cad77e487989bdd2e8f`
+SHA-256: `f8898bd2f17b7e47795a64dd15fbb9c7cf12a2d186d1031b254496acfefc2f3f`
 
 ## Install (Windows, Linux, Steam Deck)
 
@@ -83,24 +86,32 @@ that, press **Shift+Tab** to close the overlay and get your input back.
 All tests ran with the real 5.2.0 game exe (SHA-256 `cb6ea427…c4a558`) on one Linux PC under Proton
 Experimental.
 
-Build 3, 2026-11-22:
+Build 4, 2026-11-22:
 
-- **Mob-fighting test** (`scripts/run_combat_probe.sh`): the unmodded game crashed in 0 of 9 runs,
-  build 2 in 10 of 15, build 3 in 0 of 11 (511 fights; 6 of those runs had the crash fix but not yet
-  the timer fix).
+- **10 minutes of hosting** a copy of a real world (render distance 192) with a second client, one run
+  per build, 15-second slices. Build 3: lowest 9 FPS, typical 63, 7 of 38 slices under 30 FPS. Build 4:
+  lowest 45, typical 75, none under 30. The focused-window behaviour was forced for this test.
 - **Simulated lag** (the author's `tests/lan/friction.gd` mining scenario through
-  `scripts/friction_proton.sh`): 0 disconnects in 11 runs, 5 of them short because the test bot fell
-  off the map. Three pickups took over 5 seconds and the guest stayed connected.
+  `scripts/friction_proton.sh`): 0 disconnects and 0 crashes in 9 runs. Five ran in full and three were
+  short (6-7 blocks mined). **One failed:** on the spiky connection the guest connected but never
+  finished joining. Cause unknown, and not compared with build 3.
 - **Two-client LAN test** (the author's `tests/lan/local_coop.gd`): host 8 checks and guest 11 checks,
   0 failures.
+- **Mob fights** were not rerun on this exact build. The version just before it, which also had a
+  bookkeeping change that was then removed, had 0 crashes in 131 fights.
 
-Build 2, 2026-11-21: **Steam host test** (`scripts/run_steam_probe.sh`), 6 checks, 0 failures: the
-friends-only lobby is created and the overlay stays closed. Not rerun on build 3.
+Build 3, 2026-11-22: **mob-fighting test** (`scripts/run_combat_probe.sh`): the unmodded game crashed in
+0 of 9 runs, build 2 in 10 of 15, build 3 in 0 of 11 (511 fights; 6 of those runs had the crash fix but
+not yet the timer fix). The crash fix is unchanged in build 4.
 
-In real play on build 2, joining a friend through Steam worked, but the host crashed and guests were
-dropped. Those are the problems build 3 targets.
+Build 2, 2026-11-21: **Steam host test** (`scripts/run_steam_probe.sh`), 6 checks, 0 failures. Not rerun
+since.
 
-**Not tested yet:** build 3 over Steam, two real PCs, Windows, Steam Deck, and long sessions.
+In real play over Steam: on build 2 joining worked, but the host crashed and guests were dropped. On
+build 3 one host played about 18 minutes without a crash but slowed to about 1 FPS, with floating trees
+and smeary camera movement. Build 4 targets the slowdown; whether it also fixes those visuals is unknown.
+
+**Not tested yet:** build 4 over Steam, two real PCs, Windows, Steam Deck, and mixing builds.
 
 ## Known limits
 
@@ -126,7 +137,7 @@ git -C mod-src apply ../patches/coop-fixes.patch
 # Generate the imported assets (the source repo doesn't track .godot/)
 ./Godot_v4.6-stable_linux.x86_64 --headless --path mod-src/mod/overrides --import
 ./scripts/build_mod_linux.sh mod-src ./gdre_tools.x86_64 build
-# Two real game clients under Proton, Steam offline, throwaway prefixes
+# Two real game clients under Proton, throwaway prefixes, Steam blocked (the script does this)
 ./scripts/test_local_coop_proton.sh "<game dir>" build/lucid-blocks-coop.pck mod-src ./gdre_tools.x86_64 work
 ```
 

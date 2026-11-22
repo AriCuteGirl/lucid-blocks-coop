@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Linux/Proton port of mod-src/scripts/test_local_coop.ps1 (smoke scenario, clean network).
 # Runs the real lucid-blocks.exe twice (host + guest) under Proton, each in its own
-# disposable Wine prefix and runtime folder. Steam is not used (no SteamAppId), so
-# GodotSteam starts offline and the fixture connects over direct ENet on localhost.
+# disposable Wine prefix and runtime folder, connected over direct ENet on localhost.
+# Steam is blocked with WINEDLLOVERRIDES: the game sets its own app id, so unsetting SteamAppId is not enough.
 # Usage: test_local_coop_proton.sh <game dir> <mod pck> <mod-src dir> <gdre> <work dir>
 set -euo pipefail
 GAME=$(realpath "$1"); PACK=$(realpath "$2"); SRC=$(realpath "$3"); GDRE=$(realpath "$4"); WORK=$(realpath -m "$5")
@@ -36,7 +36,7 @@ launch() {
   cp "$RUN/zz-local-coop.pck" "$rt/mods/zz-local-coop.pck"
   local args=(--max-fps 60)
   [ "$HEADLESS" = 1 ] && args=(--headless "${args[@]}") || args+=(--windowed --resolution 960x540)
-  ( cd "$rt" && env -u SteamAppId -u SteamGameId \
+  ( cd "$rt" && env -u SteamAppId -u SteamGameId WINEDLLOVERRIDES="lsteamclient=;steamclient64=;steamclient=" \
       STEAM_COMPAT_DATA_PATH="$pfx" STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.local/share/Steam" \
       WINEDEBUG=-all \
       "$PROTON" run "$rt/lucid-blocks.exe" "${args[@]}" -- "$role" "Z:${RUN}" "$PORT" \

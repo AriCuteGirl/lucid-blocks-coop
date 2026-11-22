@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # friction_proton.sh <label> <game dir> <mod pck> <mod-src> <gdre> <godot> <work> <scenario> <net profile> [timeout]
-# Author's friction fixture: two real game exes under Proton, offline Steam, seeded UDP relay in between.
+# Author's friction fixture: two real game exes under Proton, seeded UDP relay in between.
+# Steam is blocked with WINEDLLOVERRIDES: the game sets its own app id, so unsetting SteamAppId is not enough.
 set -uo pipefail
 L=$1; GAME=$(realpath "$2"); PACK=$(realpath "$3"); SRC=$(realpath "$4"); GDRE=$(realpath "$5"); GODOT=$(realpath "$6"); W=$(realpath -m "$7"); SC=$8; NET=$9; T=${10:-300}
 P="$HOME/.local/share/Steam/steamapps/common/Proton - Experimental/proton"; WS="$(dirname "$P")/files/bin/wineserver"
@@ -19,7 +20,7 @@ go(){ local r=$1 port=$2 rt="$W/bin/$L-$1" px="$W/prefix/$L-$1"; mkdir -p "$rt" 
   for f in lucid-blocks.exe libgdblocks.windows.template_release.double.x86_64.dll libgodotsteam.windows.template_release.double.x86_64.dll steam_api64.dll; do ln -sfn "$GAME/$f" "$rt/$f"; done
   echo disposable > "$rt/.coop-test-runtime"; printf '[application]\nrun/flush_stdout_on_print=true\n\n[debug]\nsettings/gdscript/always_track_call_stacks=true\n' > "$rt/override.cfg"
   cp "$PACK" "$rt/mods/lucid-blocks-coop.pck"; cp "$RUN/zz.pck" "$rt/mods/zz-local-coop.pck"; rm -f "$px/pfx/drive_c/users/steamuser/AppData/Roaming/lucid blocks/logs/godot.log"
-  ( cd "$rt" && env -u SteamAppId -u SteamGameId STEAM_COMPAT_DATA_PATH="$px" STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.local/share/Steam" WINEDEBUG=-all,+seh timeout -k 5 $T "$P" run "$rt/lucid-blocks.exe" --windowed --resolution 640x360 --audio-driver Dummy --max-fps 60 -- $r "Z:$RUN" $port >/dev/null 2>"$RUN/$r.wine.log"; echo "$r exit=$?" >> "$RUN/exits" ) & }
+  ( cd "$rt" && env -u SteamAppId -u SteamGameId WINEDLLOVERRIDES="lsteamclient=;steamclient64=;steamclient=" STEAM_COMPAT_DATA_PATH="$px" STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.local/share/Steam" WINEDEBUG=-all,+seh timeout -k 5 $T "$P" run "$rt/lucid-blocks.exe" --windowed --resolution 640x360 --audio-driver Dummy --max-fps 60 -- $r "Z:$RUN" $port >/dev/null 2>"$RUN/$r.wine.log"; echo "$r exit=$?" >> "$RUN/exits" ) & }
 go host $PORT; go guest $GP
 for i in $(seq 1 $T); do [ "$(wc -l < "$RUN/exits" 2>/dev/null || echo 0)" -ge 2 ] && break; sleep 1; done
 touch "$RUN/relay.stop"; sleep 1; [ -n "$RPID" ] && kill $RPID 2>/dev/null

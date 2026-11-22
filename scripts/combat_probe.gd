@@ -103,3 +103,7 @@ func _run() -> void:
 	await _sleep(3.0)
 	step("FINISHED")
 	get_tree().quit(0)
+
+func _process(_d: float) -> void:
+	# The game drops to 15 FPS when unfocused; keep hidden test windows at full speed.
+	if Engine.max_fps != 60: Engine.max_fps = 60

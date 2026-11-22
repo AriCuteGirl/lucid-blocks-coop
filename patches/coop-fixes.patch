@@ -79,6 +79,36 @@ index ee7cde0..ea69552 100644
              if is_instance_valid(candidate) and str(Ref.preserve_node_manager.node_to_uuid_map[candidate]) == uuid:
                  existing = candidate
                  break
+diff --git a/mod/overrides/main/entity/entity.gd b/mod/overrides/main/entity/entity.gd
+index 995e481..921f4bc 100644
+--- a/mod/overrides/main/entity/entity.gd
++++ b/mod/overrides/main/entity/entity.gd
+@@ -76,8 +76,8 @@ var dexterity: int = 0
+ var process_distance: float = 0.0:
+     get:
+         if _use_session_targeting():
+-            return Ref.coop_manager.get_same_instance_activity_radius()
+-        return Ref.world.instance_radius - 16
++            return minf(Ref.coop_manager.get_same_instance_activity_radius(), 96.0)
++        return clamp(Ref.world.instance_radius - 16, 0, 96)
+ 
+ @export_group("Fire")
+ 
+diff --git a/mod/overrides/main/entity/manikin/manikin.gd b/mod/overrides/main/entity/manikin/manikin.gd
+index d9cc4f5..f04e676 100644
+--- a/mod/overrides/main/entity/manikin/manikin.gd
++++ b/mod/overrides/main/entity/manikin/manikin.gd
+@@ -71,9 +71,7 @@ func _debug_target_label(target) -> String:
+ 
+ 
+ func _debug_log(message: String) -> void:
+-    if not _use_session_targeting():
+-        return
+-    print("[lucid-blocks-coop][manikin-debug] ", message)
++    pass
+ 
+ 
+ func _ready() -> void:
 diff --git a/mod/overrides/main/save_file/preserve_node_manager.gd b/mod/overrides/main/save_file/preserve_node_manager.gd
 index 56133e1..0b187fe 100644
 --- a/mod/overrides/main/save_file/preserve_node_manager.gd
@@ -95,3 +125,55 @@ index 56133e1..0b187fe 100644
  
  
  func _on_chunk_loaded(position: Vector3i) -> void :
+diff --git a/mod/overrides/main/world/world.gd b/mod/overrides/main/world/world.gd
+index 33a8d7f..0c246e4 100644
+--- a/mod/overrides/main/world/world.gd
++++ b/mod/overrides/main/world/world.gd
+@@ -36,6 +36,7 @@ var buffer_instance_radius: int = 80
+ var fps_cap: int = 60
+ var current_seed: int
+ var even: bool = false
++var process_blocker: bool = false
+ var coop_perf_override_active: bool = false
+ var coop_dynamic_visual_refresh_frames: int = 0
+ var coop_original_os_low_processor_mode_set: bool = false
+@@ -79,6 +80,7 @@ func _on_delusion_updated(new_value: float) -> void :
+ 
+ func _on_settings_updated() -> void :
+     instance_radius = int(Ref.save_file_manager.settings_file.get_data("render_distance", 80.0))
++    usec_budget_per_frame = get_usec_from_fps()
+     Ref.world.force_reload()
+     RenderingServer.viewport_set_scaling_3d_scale(get_viewport().get_viewport_rid(), Ref.save_file_manager.settings_file.get_data("render_scale", 100) / 100.0)
+     _apply_frame_pacing_settings()
+@@ -151,7 +153,10 @@ func _notification(what: int) -> void :
+ func _physics_process(_delta: float) -> void :
+     if load_enabled:
+         even = not even
+-        set_loaded_region_center(Ref.player.global_position)
++        # 5.2.0: at most once per rendered frame, or a slow frame queues even more chunk work.
++        if not process_blocker:
++            process_blocker = true
++            set_loaded_region_center(Ref.player.global_position)
+ 
+         var pause_blocks_sim: bool = get_tree().paused and not _is_coop_perf_override_active()
+         var allow_dynamic_tick: bool = simulate_frame or _should_force_background_dynamic_ticks()
+@@ -162,6 +167,7 @@ func _physics_process(_delta: float) -> void :
+ 
+ 
+ func _process(_delta: float) -> void :
++    process_blocker = false
+     simulate_frame = true
+     var coop_override_now: bool = _is_coop_perf_override_active()
+     if coop_override_now != coop_perf_override_active:
+@@ -172,6 +178,11 @@ func _is_guest_visual_refresh_needed() -> bool:
+     return Ref.coop_manager != null and Ref.coop_manager.is_client_session() and not simulate_enabled
+ 
+ 
++func get_usec_from_fps() -> int:
++    var cap: float = float(Ref.save_file_manager.settings_file.get_data("fps_cap", 60))
++    return int(1000000.0 / (cap if cap > 0.0 else 60.0) * 0.5)
++
++
+ func queue_coop_dynamic_visual_refresh(frame_count: int = 4) -> void:
+     if not _is_guest_visual_refresh_needed():
+         return
