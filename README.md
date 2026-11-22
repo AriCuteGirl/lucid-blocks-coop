@@ -1,7 +1,7 @@
 # Lucid Blocks Co-op (5.2.0 build)
 
 Two-player online co-op for **Lucid Blocks** (Steam, game version **5.2.0**, build 26206996),
-over Steam invites or direct IP. Works on Windows, Linux and Steam Deck (Proton).
+over Steam invites or direct IP. Tested on Linux under Proton; Windows and Steam Deck are untested by this repo.
 
 **This is not my mod.** It's a ready-to-use build of
 [trism-prism's 5.2.0 update](https://github.com/trism-prism/lucid-blocks-coop-updated)
@@ -13,15 +13,22 @@ Mod authors: if you'd rather this build not be shared here, open an issue and I'
 
 Built from `trism-prism/lucid-blocks-coop-updated` commit
 [`96e7fc1`](https://github.com/trism-prism/lucid-blocks-coop-updated/commit/96e7fc146c590e2fbc904a9e574a10e88f085ab4)
-plus one small fix in [`patches/`](patches/): **Host Steam no longer opens the Steam overlay
-automatically.** Under Proton the invite overlay could open invisibly, and Proton blocks all game
-input while the overlay is open, so the game looked frozen.
+plus the fixes in [`patches/coop-fixes.patch`](patches/coop-fixes.patch):
+
+- **Crash a few seconds after killing mobs (host and solo).** A killed mob's entry stayed in the
+  game's `Dictionary[Node, String]` of saved objects. The mod's 5-second autosave looped over it, and
+  release builds of Godot crash on the freed key.
+- **Guest dropped with "Chest transaction acknowledgement timed out".** One 5-second timer covered
+  steps that may each take 30 seconds. On a host the same timer could disable the player for good.
+- **Login timeout** raised from 5 to 20 seconds for slow connections.
+- **Host Steam no longer opens the Steam overlay automatically.** Under Proton it could open
+  invisibly and block all game input, so the game looked frozen.
 
 ## Download
 
 Grab `lucid-blocks-coop.pck` from [Releases](../../releases/latest).
 
-SHA-256: `96f7878696464147ab5fc3e0335f15478a1eac83418542765b5de0bb7c748c60`
+SHA-256: `fc1a5749c8a6f9331a09a66a5a6ae2292b48800afa942cad77e487989bdd2e8f`
 
 ## Install (Windows, Linux, Steam Deck)
 
@@ -32,7 +39,8 @@ SHA-256: `96f7878696464147ab5fc3e0335f15478a1eac83418542765b5de0bb7c748c60`
    - Windows: `%APPDATA%\lucid blocks`
    - Linux/Deck: `steamapps/compatdata/3495730/pfx/drive_c/users/steamuser/AppData/Roaming/lucid blocks`
 
-Both players need the same game version and the same `.pck`.
+Both players need the same game version and should use the same `.pck`. Older builds still connect,
+but whoever runs one can still crash.
 Uninstall: delete the `.pck`.
 
 ## Play through Steam
@@ -72,23 +80,35 @@ that, press **Shift+Tab** to close the overlay and get your input back.
 
 ## What's tested
 
-All tests ran with the real 5.2.0 game exe (SHA-256 `cb6ea427…c4a558`) on Linux under Proton
-Experimental (11.0-100), on 2026-11-21 (build 2):
+All tests ran with the real 5.2.0 game exe (SHA-256 `cb6ea427…c4a558`) on one Linux PC under Proton
+Experimental.
 
-- **Two-client LAN test** (the mod author's `tests/lan/local_coop.gd`): host 8 checks and guest 11
-  checks, **0 failures**. It covers joining, guest block edits saved on the host, independent loading
-  and dimension travel, reconnecting, cross-dimension teleport, and a clean host shutdown.
-- **Steam host test** (`scripts/run_steam_probe.sh` + `steam_host_probe.gd`, windowed, with the
-  Steam overlay loaded): with a real logged-in Steam account, Host Steam creates a friends-only
-  lobby owned by the host, the Steam host connection comes up, and the overlay stays closed.
-  6 checks, 0 failures.
+Build 3, 2026-11-22:
 
-**Not tested yet:** a second Steam account actually joining through an invite, play across two
-real PCs, and how it feels in a long session.
+- **Mob-fighting test** (`scripts/run_combat_probe.sh`): the unmodded game crashed in 0 of 9 runs,
+  build 2 in 10 of 15, build 3 in 0 of 11 (511 fights; 6 of those runs had the crash fix but not yet
+  the timer fix).
+- **Simulated lag** (the author's `tests/lan/friction.gd` mining scenario through
+  `scripts/friction_proton.sh`): 0 disconnects in 11 runs, 5 of them short because the test bot fell
+  off the map. Three pickups took over 5 seconds and the guest stayed connected.
+- **Two-client LAN test** (the author's `tests/lan/local_coop.gd`): host 8 checks and guest 11 checks,
+  0 failures.
+
+Build 2, 2026-11-21: **Steam host test** (`scripts/run_steam_probe.sh`), 6 checks, 0 failures: the
+friends-only lobby is created and the overlay stays closed. Not rerun on build 3.
+
+In real play on build 2, joining a friend through Steam worked, but the host crashed and guests were
+dropped. Those are the problems build 3 targets.
+
+**Not tested yet:** build 3 over Steam, two real PCs, Windows, Steam Deck, and long sessions.
 
 ## Known limits
 
 - Two players max, and there's no dedicated server.
+- Guest pickups take about 0.3-1.2 s on a simulated typical connection, longer if the host is slow.
+- The mod replaces some game scripts with older versions, so a few 5.2.0 details are missing (for
+  example Fruit Girl's blink and hurt animations).
+- `PackedInt32Array` errors can appear in the log after a new world loads. Not investigated yet.
 - The log shows resource-leak warnings on shutdown. They're harmless and the original author
   documents them too.
 
@@ -102,7 +122,7 @@ editor (`Godot_v4.6-stable_linux.x86_64.zip`, SHA-256 `6bcc59df…6dc06`) and
 ```bash
 git clone https://github.com/trism-prism/lucid-blocks-coop-updated mod-src
 git -C mod-src checkout 96e7fc146c590e2fbc904a9e574a10e88f085ab4
-git -C mod-src apply ../patches/0001-no-auto-steam-overlay.patch
+git -C mod-src apply ../patches/coop-fixes.patch
 # Generate the imported assets (the source repo doesn't track .godot/)
 ./Godot_v4.6-stable_linux.x86_64 --headless --path mod-src/mod/overrides --import
 ./scripts/build_mod_linux.sh mod-src ./gdre_tools.x86_64 build
@@ -111,14 +131,15 @@ git -C mod-src apply ../patches/0001-no-auto-steam-overlay.patch
 ```
 
 The game itself is a Godot 4.6 **double-precision** build. No official double-precision 4.6 editor
-is published, so the single-precision editor is used only to import the mod's assets. The game
-loads them fine, and the remote player's avatar renders and animates.
+is published, so the single-precision editor is used only to import the mod's assets.
+Asset import isn't byte-reproducible, so your own build's hash will differ from the release's.
 
-The build contains no game files, only the mod's own scripts and assets.
+The build contains the mod's own scripts and assets plus the mod's **modified versions of the game's own
+scripts** (everything under `main/`). It contains none of the game's art, audio or executables.
 
 ## Credits
 
 - [parkers0405](https://github.com/parkers0405): original Lucid Blocks co-op mod
 - [trism-prism](https://github.com/trism-prism): 5.2.0 update, identity and dimension rework, test suite
 - Lucid Blocks by its developers. Buy it on [Steam](https://store.steampowered.com/app/3495730/Lucid_Blocks/).
-- This repo: packaging, the Proton overlay-freeze fix, Linux/Proton build and test scripts, and these instructions.
+- This repo: packaging, the fixes listed above, Linux/Proton build and test scripts, and these instructions.

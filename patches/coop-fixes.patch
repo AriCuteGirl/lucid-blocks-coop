@@ -1,0 +1,97 @@
+diff --git a/mod/overrides/coop_mod/coop_manager.gd b/mod/overrides/coop_mod/coop_manager.gd
+index ee7cde0..ea69552 100644
+--- a/mod/overrides/coop_mod/coop_manager.gd
++++ b/mod/overrides/coop_mod/coop_manager.gd
+@@ -1066,7 +1066,10 @@ func _capture_local_instance_nodes() -> Array:
+     var live_uuids: Dictionary = {}
+     if not is_instance_valid(Ref.preserve_node_manager):
+         return []
+-    for node in Ref.preserve_node_manager.node_to_uuid_map:
++    # keys() copies without type-checking; never index or iterate the typed map with a freed node.
++    for node in Ref.preserve_node_manager.node_to_uuid_map.keys():
++        if not is_instance_valid(node):
++            continue
+         var uuid: String = str(Ref.preserve_node_manager.node_to_uuid_map[node])
+         live_uuids[uuid] = true
+         if not is_instance_valid(node) or not node is Node3D or node is Player or is_remote_player_proxy(node) or not node.has_method("preserve_save"):
+@@ -1987,7 +1990,11 @@ func _invalidate_local_chest() -> void:
+ 
+ 
+ func _tick_chest_transaction_timeout(now: int) -> void:
+-    if chest_pending_token.is_empty() or chest_pending_token == "recovering" or now - chest_request_sent_at <= 5000:
++    if chest_pending_token.is_empty() or chest_pending_token == "recovering" or now - chest_request_sent_at <= CHEST_ACK_TIMEOUT_MS:
++        return
++    # The host answers itself from its own save queue and cannot reconnect to itself;
++    # timing out here would only disable the host's player for good.
++    if multiplayer.is_server():
+         return
+     chest_pending_token = "recovering"
+     chest_active_token = ""
+@@ -2010,7 +2017,10 @@ const MAX_PLAYERS: int = 2
+ const MAX_CLIENTS: int = MAX_PLAYERS - 1
+ const MOD_PROTOCOL_VERSION: int = 7
+ const TARGET_GAME_VERSION: String = "5.2.0"
+-const AUTH_TIMEOUT_SECONDS: float = 5.0
++const AUTH_TIMEOUT_SECONDS: float = 20.0
++# Each step of a pickup may legitimately wait HOST_TIMEOUT_SECONDS (profile checkpoint, then the
++# host's own save, then the pickup itself), so the acknowledgement must not expire before they do.
++const CHEST_ACK_TIMEOUT_MS: int = 30000
+ const AUTH_MAX_BYTES: int = 2048
+ const SESSION_TRANSPORT_LAN: String = "lan"
+ const SESSION_TRANSPORT_STEAM: String = "steam"
+@@ -2791,7 +2801,7 @@ func _start_steam_host_peer(lobby_id: int) -> void:
+     reconnect_steam_lobby_id = active_steam_lobby_id
+     reconnect_steam_host_id = active_steam_host_id
+     _install_player_death_hook()
+-    status_message = "Hosting Steam lobby"
++    status_message = "Hosting Steam lobby - invite friends from your Steam friends list"
+     _update_status_text()
+     if pending_steam_open_invite_dialog:
+         pending_steam_open_invite_dialog = false
+@@ -2830,7 +2840,10 @@ func _start_steam_client_peer(lobby_id: int) -> void:
+     _update_status_text()
+ 
+ 
+-func host_steam_session(auto_open_invite_dialog: bool = true) -> void:
++# Proton disables all game input while the Steam overlay is active; if the invite
++# overlay opens invisibly the game looks frozen. Don't open it automatically: invite
++# from the Steam friends list instead (/invite still opens it on request).
++func host_steam_session(auto_open_invite_dialog: bool = false) -> void:
+     if not _can_share_loaded_world():
+         status_message = "Open Steam co-op from inside a loaded world"
+         _update_status_text()
+@@ -6539,6 +6552,9 @@ func _begin_durable_pickup(dropped_item) -> void:
+     else:
+         ok = await _await_profile_checkpoint()
+     pickup_checkpoint_allowed = false
++    if chest_pending_token == request:
++        # The checkpoint has its own deadline; only now does the acknowledgement clock start.
++        chest_request_sent_at = Time.get_ticks_msec()
+     if not ok or epoch != terrain_epoch:
+         receive_durable_pickup(request, {}, epoch)
+         return
+@@ -8427,7 +8443,7 @@ func _materialize_entity_from_save_bundle(bundle: Dictionary, guest_local_author
+ 
+     var existing = _find_existing_entity_by_uuid(uuid)
+     if not is_instance_valid(existing):
+-        for candidate in Ref.preserve_node_manager.node_to_uuid_map:
++        for candidate in Ref.preserve_node_manager.node_to_uuid_map.keys():
+             if is_instance_valid(candidate) and str(Ref.preserve_node_manager.node_to_uuid_map[candidate]) == uuid:
+                 existing = candidate
+                 break
+diff --git a/mod/overrides/main/save_file/preserve_node_manager.gd b/mod/overrides/main/save_file/preserve_node_manager.gd
+index 56133e1..0b187fe 100644
+--- a/mod/overrides/main/save_file/preserve_node_manager.gd
++++ b/mod/overrides/main/save_file/preserve_node_manager.gd
+@@ -44,6 +44,11 @@ func _on_child_exiting_tree(node: Node) -> void :
+             keep_on_next_removal.erase(node)
+             return
+         Ref.save_file_manager.loaded_file.erase_data("node/%s" % uuid)
++    else:
++        # Entity.die() leaves the preserve groups before the node is freed. A freed key in a
++        # Dictionary[Node, ...] crashes release builds as soon as anything iterates it.
++        node_to_uuid_map.erase(node)
++        keep_on_next_removal.erase(node)
+ 
+ 
+ func _on_chunk_loaded(position: Vector3i) -> void :
